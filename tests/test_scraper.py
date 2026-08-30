@@ -20,7 +20,7 @@ def test_parse_page_extracts_title_year_and_type():
     assert movie.fa_id == "270437"
 
     series = items[1]
-    assert series.title == "Otra serie"
-    assert series.year == 2019
+    assert series.title == "Dune: La profecía"
+    assert series.year == 2024
     assert series.media_type == "tv_series"
-    assert series.fa_id == "654321"
+    assert series.fa_id == "811200"

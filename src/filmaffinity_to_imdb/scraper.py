@@ -47,6 +47,7 @@ SELECTORS = {
     "item_card": "li.list-row[data-movie-id]",
     "title": ".mc-title a",
     "year": ".mc-year",
+    "poster_img": ".mc-poster img",
 }
 
 RATE_LIMIT_SECONDS = 3  # espera entre peticiones para no saturar el servidor
@@ -143,9 +144,12 @@ class FAScraper:
 
     @staticmethod
     def _guess_media_type(card) -> str:
-        # FilmAffinity distingue series con una etiqueta "Serie de TV" en
-        # el propio card. Fallback: se asume película.
-        text = card.get_text(" ", strip=True).lower()
-        if "serie" in text:
+        # El alt de la imagen del póster trae el sufijo "(Serie de TV)"
+        # cuando es una serie; en películas no lleva ningún sufijo. Es más
+        # fiable que buscar la palabra "serie" en el texto de la tarjeta,
+        # que podría aparecer por casualidad en el reparto o el género.
+        poster_img = card.select_one(SELECTORS["poster_img"])
+        alt_text = poster_img.get("alt", "") if poster_img else ""
+        if "serie de tv" in alt_text.lower():
             return "tv_series"
         return "movie"
