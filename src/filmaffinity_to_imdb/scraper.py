@@ -28,6 +28,7 @@ import time
 from dataclasses import dataclass
 from typing import Iterator, Optional
 
+import cloudscraper
 import requests
 from bs4 import BeautifulSoup
 
@@ -44,7 +45,7 @@ DEFAULT_HEADERS = {
 # Selectores centralizados: si FilmAffinity cambia el HTML, solo hay que
 # tocar aquí.
 SELECTORS = {
-    "item_card": "li.list-row[data-movie-id]",
+    "item_card": "li[data-movie-id]",
     "title": ".mc-title a",
     "year": ".mc-year",
     "poster_img": ".mc-poster img",
@@ -63,7 +64,13 @@ class FAScraperConfig:
 class FAScraper:
     def __init__(self, config: Optional[FAScraperConfig] = None):
         self.config = config or FAScraperConfig()
-        self.session = requests.Session()
+        # cloudscraper en vez de requests.Session(): resuelve automáticamente
+        # los challenges de Cloudflare (ver cf-mitigated: challenge en la
+        # respuesta 403). Si en el futuro Cloudflare endurece el challenge,
+        # esto podría dejar de bastar y tocaría pasar a Playwright.
+        self.session = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "windows", "mobile": False}
+        )
         self.session.headers.update(DEFAULT_HEADERS)
 
     def scrape_list(self, list_url: str, list_name: str = "") -> Iterator[FAItem]:
@@ -72,21 +79,40 @@ class FAScraper:
         FAItem por cada película/serie encontrada.
 
         list_url: URL completa de la primera página de la lista, p.ej.
-            https://www.filmaffinity.com/es/mylist.php?list_id=XXXX
+            https://www.filmaffinity.com/es/userlist.php?user_id=X&list_id=XXXX
+
+        Nota: al pedir una página más allá de la última real, FilmAffinity
+        no devuelve una página vacía, sino que repite el contenido de la
+        última página válida. Por eso llevamos la cuenta de los fa_id ya
+        vistos: si una página no aporta ningún item nuevo, asumimos que
+        hemos llegado al final y paramos ahí, en vez de fiarnos solo de
+        max_pages.
         """
         page = 1
         seen_any = False
+        seen_ids: set[str] = set()
 
         while page <= self.config.max_pages:
             url = self._paginate(list_url, page)
-            html = self._fetch(url)
+            try:
+                html = self._fetch(url)
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 404:
+                    break  # nos pasamos del final real de la lista
+                raise
             items = list(self._parse_page(html, list_name=list_name))
 
             if not items:
                 break
 
+            new_items = [item for item in items if item.fa_id not in seen_ids]
+            if not new_items:
+                break  # página repetida: hemos llegado al final real de la lista
+
             seen_any = True
-            yield from items
+            seen_ids.update(item.fa_id for item in new_items)
+            yield from new_items
+
             page += 1
             time.sleep(self.config.rate_limit_seconds)
 
@@ -108,7 +134,7 @@ class FAScraper:
         if page == 1:
             return list_url
         sep = "&" if "?" in list_url else "?"
-        return f"{list_url}{sep}p={page}"
+        return f"{list_url}{sep}page={page}"
 
     def _parse_page(self, html: str, list_name: str) -> Iterator[FAItem]:
         soup = BeautifulSoup(html, "html.parser")

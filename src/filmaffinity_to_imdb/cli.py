@@ -18,7 +18,7 @@ import click
 from dotenv import load_dotenv
 
 from .exporter import export_matches
-from .matcher import OMDbMatcher
+from .tmdb_matcher import TMDbMatcher
 from .models import FAItem
 from .scraper import FAScraper
 
@@ -51,11 +51,11 @@ def scrape(list_url: str, list_name: str, output: str):
 @cli.command()
 @click.argument("input_csv")
 @click.option("-o", "--output", default="imdb_import.csv", help="CSV compatible con importadores de IMDb.")
-@click.option("--omdb-key", default=lambda: os.environ.get("OMDB_API_KEY", ""), help="API key de OMDb (o usa OMDB_API_KEY en .env).")
-def match(input_csv: str, output: str, omdb_key: str):
+@click.option("--tmdb-key", default=lambda: os.environ.get("TMDB_API_KEY", ""), help="API key de TMDb (o usa TMDB_API_KEY en .env).")
+def match(input_csv: str, output: str, tmdb_key: str):
     """Resuelve los títulos de un CSV intermedio a IDs de IMDb."""
     items = _read_intermediate_csv(input_csv)
-    matcher = OMDbMatcher(api_key=omdb_key)
+    matcher = TMDbMatcher(api_key=tmdb_key)
 
     matches = []
     with click.progressbar(items, label="Buscando en OMDb") as bar:
@@ -76,14 +76,14 @@ def match(input_csv: str, output: str, omdb_key: str):
 @click.argument("list_url")
 @click.option("--list-name", default="")
 @click.option("-o", "--output", default="imdb_import.csv")
-@click.option("--omdb-key", default=lambda: os.environ.get("OMDB_API_KEY", ""))
-def run(list_url: str, list_name: str, output: str, omdb_key: str):
+@click.option("--tmdb-key", default=lambda: os.environ.get("TMDB_API_KEY", ""))
+def run(list_url: str, list_name: str, output: str, tmdb_key: str):
     """Pipeline completo: scrape + match en un solo paso."""
     scraper = FAScraper()
     items = list(scraper.scrape_list(list_url, list_name=list_name))
     click.echo(f"{len(items)} items extraídos de FilmAffinity.")
 
-    matcher = OMDbMatcher(api_key=omdb_key)
+    matcher = TMDbMatcher(api_key=tmdb_key)
     matches = []
     with click.progressbar(items, label="Buscando en OMDb") as bar:
         for item in bar:
