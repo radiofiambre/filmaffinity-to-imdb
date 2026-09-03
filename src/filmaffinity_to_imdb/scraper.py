@@ -49,6 +49,7 @@ SELECTORS = {
     "title": ".mc-title a",
     "year": ".mc-year",
     "poster_img": ".mc-poster img",
+    "user_rating": ".fa-user-rat-box",
 }
 
 RATE_LIMIT_SECONDS = 3  # espera entre peticiones para no saturar el servidor
@@ -158,6 +159,7 @@ class FAScraper:
                     year = int(year_match.group())
 
             media_type = self._guess_media_type(card)
+            user_rating = self._parse_user_rating(card)
 
             yield FAItem(
                 title=title,
@@ -166,6 +168,7 @@ class FAScraper:
                 fa_id=fa_id,
                 fa_url=fa_url,
                 list_name=list_name,
+                user_rating=user_rating,
             )
 
     @staticmethod
@@ -179,3 +182,18 @@ class FAScraper:
         if "serie de tv" in alt_text.lower():
             return "tv_series"
         return "movie"
+
+    @staticmethod
+    def _parse_user_rating(card) -> Optional[int]:
+        # "-" significa que no has puntuado el título; si hay nota, viene
+        # como texto plano dentro del mismo div (p.ej. "8").
+        rating_el = card.select_one(SELECTORS["user_rating"])
+        if not rating_el:
+            return None
+        text = rating_el.get_text(strip=True)
+        if not text or text == "-":
+            return None
+        try:
+            return int(text)
+        except ValueError:
+            return None

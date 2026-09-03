@@ -14,6 +14,7 @@ class FAItem:
     fa_id: Optional[str] = None       # ID interno de FilmAffinity, si se pudo extraer
     fa_url: Optional[str] = None
     list_name: str = ""
+    user_rating: Optional[int] = None  # tu nota personal en FilmAffinity (1-10), None si no puntuaste
 
     # Se rellena en la fase de matching
     imdb_id: Optional[str] = None     # p.ej. "tt0111161"
@@ -27,6 +28,7 @@ class MatchResult:
     item: FAItem
     imdb_id: Optional[str]
     imdb_title: Optional[str] = None
+    imdb_original_title: Optional[str] = None
     imdb_year: Optional[int] = None
     confidence: str = "none"  # "exact" | "fuzzy" | "none"
     candidates: list = field(default_factory=list)  # otros posibles matches, si hay ambigüedad

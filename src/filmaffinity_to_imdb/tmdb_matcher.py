@@ -27,6 +27,7 @@ TMDB_SEARCH_PATH = {"movie": "/search/movie", "tv_series": "/search/tv"}
 TMDB_EXTERNAL_IDS_PATH = {"movie": "/movie/{id}/external_ids", "tv_series": "/tv/{id}/external_ids"}
 TMDB_YEAR_PARAM = {"movie": "year", "tv_series": "first_air_date_year"}
 TMDB_TITLE_FIELD = {"movie": "title", "tv_series": "name"}
+TMDB_ORIGINAL_TITLE_FIELD = {"movie": "original_title", "tv_series": "original_name"}
 TMDB_DATE_FIELD = {"movie": "release_date", "tv_series": "first_air_date"}
 
 
@@ -66,10 +67,10 @@ class TMDbMatcher:
             item=item,
             imdb_id=imdb_id,
             imdb_title=result.get(TMDB_TITLE_FIELD[media_type]),
+            imdb_original_title=result.get(TMDB_ORIGINAL_TITLE_FIELD[media_type]),
             imdb_year=result_year,
             confidence="exact" if (item.year and result_year == item.year) else "fuzzy",
         )
-
     def _search(self, title: str, year: Optional[int], media_type: str) -> Optional[dict]:
         params = {"api_key": self.api_key, "query": title, "language": self.language}
         if year:

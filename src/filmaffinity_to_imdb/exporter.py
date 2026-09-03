@@ -10,24 +10,31 @@ También se generan dos ficheros aparte:
     revisarlos y añadirlos a mano.
   - *_ambiguous.csv: items resueltos con baja confianza, para verificar antes
     de subirlos.
+
+Nota: si una ejecución anterior generó *_ambiguous.csv o *_unmatched.csv y la
+ejecución actual no tiene nada que poner en alguno de los dos, ese fichero se
+borra en vez de dejarlo con datos de una ejecución vieja (ver _write_or_clear).
 """
 
 from __future__ import annotations
 
 import csv
+import os
+from datetime import date
 from pathlib import Path
 from typing import Iterable
 
 from .models import MatchResult
 
+# Mismas columnas que exporta el propio IMDb, para máxima compatibilidad.
 IMDB_CSV_FIELDS = [
-    "Position",
-    "Const",
-    "Created",
-    "Title",
-    "Title Type",
-    "Year",
+    "Position", "Const", "Created", "Modified", "Description", "Title",
+    "Original Title", "URL", "Title Type", "IMDb Rating", "Runtime (mins)",
+    "Year", "Genres", "Num Votes", "Release Date", "Directors",
+    "Your Rating", "Date Rated",
 ]
+
+TITLE_TYPE_LABEL = {"movie": "Película", "tv_series": "Serie de TV"}
 
 
 def export_matches(matches: Iterable[MatchResult], output_path: str) -> dict:
@@ -43,10 +50,11 @@ def export_matches(matches: Iterable[MatchResult], output_path: str) -> dict:
     _write_csv(output_path, matched)
 
     base = Path(output_path)
-    if ambiguous:
-        _write_csv(base.with_name(f"{base.stem}_ambiguous{base.suffix}"), ambiguous)
-    if unmatched:
-        _write_unmatched(base.with_name(f"{base.stem}_unmatched{base.suffix}"), unmatched)
+    ambiguous_path = base.with_name(f"{base.stem}_ambiguous{base.suffix}")
+    unmatched_path = base.with_name(f"{base.stem}_unmatched{base.suffix}")
+
+    _write_or_clear(ambiguous_path, ambiguous, lambda path, rows: _write_csv(path, rows))
+    _write_or_clear(unmatched_path, unmatched, lambda path, rows: _write_unmatched(path, rows))
 
     return {
         "matched": len(matched),
@@ -56,18 +64,45 @@ def export_matches(matches: Iterable[MatchResult], output_path: str) -> dict:
     }
 
 
+def _write_or_clear(path: Path, rows: list, writer_fn) -> None:
+    """
+    Si hay filas, las escribe con writer_fn. Si no hay ninguna, borra el
+    fichero (si existe de una ejecución anterior) para no dejar datos
+    caducados de una pasada previa.
+    """
+    if rows:
+        writer_fn(path, rows)
+    elif path.exists():
+        os.remove(path)
+
+
 def _write_csv(path, matches: list[MatchResult]) -> None:
+    today = date.today().isoformat()
+
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=IMDB_CSV_FIELDS)
         writer.writeheader()
         for position, m in enumerate(matches, start=1):
+            user_rating = m.item.user_rating
             writer.writerow({
                 "Position": position,
                 "Const": m.imdb_id,
                 "Created": "",
+                "Modified": "",
+                "Description": "",
                 "Title": m.imdb_title or m.item.title,
-                "Title Type": "tvSeries" if m.item.media_type == "tv_series" else "movie",
+                "Original Title": m.imdb_original_title or "",
+                "URL": f"https://www.imdb.com/title/{m.imdb_id}/",
+                "Title Type": TITLE_TYPE_LABEL.get(m.item.media_type, "Película"),
+                "IMDb Rating": "",
+                "Runtime (mins)": "",
                 "Year": m.imdb_year or m.item.year or "",
+                "Genres": "",
+                "Num Votes": "",
+                "Release Date": "",
+                "Directors": "",
+                "Your Rating": user_rating if user_rating is not None else "",
+                "Date Rated": today if user_rating is not None else "",
             })
 
 
