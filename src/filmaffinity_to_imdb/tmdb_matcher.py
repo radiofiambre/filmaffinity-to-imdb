@@ -3,7 +3,7 @@ Resuelve cada FAItem a un ID de IMDb usando la API de TMDb (The Movie
 Database). A diferencia de OMDb, la búsqueda de TMDb acepta un parámetro de
 idioma y compara la consulta contra títulos TRADUCIDOS, no solo el original
 — crucial para listas de FilmAffinity, que muestra los títulos en español
-("Canino") mientras que IMDb/OMDb indexan por título original ("Dogtooth").
+("Canino") mientras que IMDb indexa por título original ("Dogtooth").
 
 Necesitas una API key gratuita (v3 auth) en
 https://www.themoviedb.org/settings/api.
@@ -11,6 +11,10 @@ https://www.themoviedb.org/settings/api.
 El proceso son DOS llamadas por título:
   1. /search/movie o /search/tv (según el tipo) con el título en español.
   2. /movie/{id}/external_ids o /tv/{id}/external_ids, para sacar el tt-ID.
+
+Un resultado se marca "exact" solo si el año que devuelve TMDb coincide con
+el año de FilmAffinity; si no coincide (remakes, fechas de estreno distintas
+por país, etc.), se marca "fuzzy" para que se revise a mano antes de subirlo.
 """
 
 from __future__ import annotations
@@ -71,6 +75,7 @@ class TMDbMatcher:
             imdb_year=result_year,
             confidence="exact" if (item.year and result_year == item.year) else "fuzzy",
         )
+
     def _search(self, title: str, year: Optional[int], media_type: str) -> Optional[dict]:
         params = {"api_key": self.api_key, "query": title, "language": self.language}
         if year:

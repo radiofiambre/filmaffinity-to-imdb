@@ -1,19 +1,20 @@
 """
-Genera un CSV con el formato que esperan los importadores de listas de IMDb
-(la columna clave es "Const", que debe contener el tt-ID). Este es el mismo
-formato que el propio IMDb usa al exportar tus listas, así que es compatible
-tanto con userscripts tipo "IMDb List Bulk Uploader" como con cualquier otra
-herramienta que espere un export nativo de IMDb.
+Genera un CSV con el mismo formato que exporta el propio IMDb (columna clave
+"Const" = tt-ID), listo para importar desde
+https://www.imdb.com/es-es/labs/import-watch-history/
 
-También se generan dos ficheros aparte:
-  - *_unmatched.csv: items que no se pudieron resolver a un ID de IMDb, para
-    revisarlos y añadirlos a mano.
-  - *_ambiguous.csv: items resueltos con baja confianza, para verificar antes
-    de subirlos.
+Los ficheros de salida se nombran a partir del nombre de la lista (ver
+naming.slugify), para que migrar varias listas no sobreescriba los CSV de
+unas con los de otras. Para la lista "Películas que quiero ver" se generan:
 
-Nota: si una ejecución anterior generó *_ambiguous.csv o *_unmatched.csv y la
-ejecución actual no tiene nada que poner en alguno de los dos, ese fichero se
-borra en vez de dejarlo con datos de una ejecución vieja (ver _write_or_clear).
+  peliculas_que_quiero_ver.csv             -> resueltos con confianza alta
+  peliculas_que_quiero_ver_ambiguous.csv   -> resueltos pero a revisar (el
+                                               año no coincidía exactamente)
+  peliculas_que_quiero_ver_unmatched.csv   -> no se encontraron en TMDb
+
+Si una ejecución no tiene nada que poner en _ambiguous o _unmatched, el
+fichero correspondiente de una ejecución anterior se borra en vez de
+dejarse con datos caducados.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .models import MatchResult
+from .naming import slugify
 
 # Mismas columnas que exporta el propio IMDb, para máxima compatibilidad.
 IMDB_CSV_FIELDS = [
@@ -37,39 +39,42 @@ IMDB_CSV_FIELDS = [
 TITLE_TYPE_LABEL = {"movie": "Película", "tv_series": "Serie de TV"}
 
 
-def export_matches(matches: Iterable[MatchResult], output_path: str) -> dict:
+def export_matches(matches: Iterable[MatchResult], list_name: str, output_dir: str = ".") -> dict:
     """
-    Escribe output_path (matched), output_path con sufijo _unmatched y
-    _ambiguous. Devuelve un pequeño resumen con los conteos.
+    Escribe los CSV de salida (nombrados según list_name) y devuelve un
+    resumen con los conteos y las rutas generadas.
     """
     matches = list(matches)
     matched = [m for m in matches if m.imdb_id and m.confidence == "exact"]
     ambiguous = [m for m in matches if m.imdb_id and m.confidence != "exact"]
     unmatched = [m for m in matches if not m.imdb_id]
 
-    _write_csv(output_path, matched)
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    slug = slugify(list_name)
 
-    base = Path(output_path)
-    ambiguous_path = base.with_name(f"{base.stem}_ambiguous{base.suffix}")
-    unmatched_path = base.with_name(f"{base.stem}_unmatched{base.suffix}")
+    matched_path = out_dir / f"{slug}.csv"
+    ambiguous_path = out_dir / f"{slug}_ambiguous.csv"
+    unmatched_path = out_dir / f"{slug}_unmatched.csv"
 
-    _write_or_clear(ambiguous_path, ambiguous, lambda path, rows: _write_csv(path, rows))
-    _write_or_clear(unmatched_path, unmatched, lambda path, rows: _write_unmatched(path, rows))
+    _write_csv(matched_path, matched)
+    _write_or_clear(ambiguous_path, ambiguous, _write_csv)
+    _write_or_clear(unmatched_path, unmatched, _write_unmatched)
 
     return {
         "matched": len(matched),
         "ambiguous": len(ambiguous),
         "unmatched": len(unmatched),
         "total": len(matches),
+        "matched_path": str(matched_path),
+        "ambiguous_path": str(ambiguous_path) if ambiguous else None,
+        "unmatched_path": str(unmatched_path) if unmatched else None,
     }
 
 
 def _write_or_clear(path: Path, rows: list, writer_fn) -> None:
-    """
-    Si hay filas, las escribe con writer_fn. Si no hay ninguna, borra el
-    fichero (si existe de una ejecución anterior) para no dejar datos
-    caducados de una pasada previa.
-    """
+    """Si hay filas las escribe; si no, borra el fichero de una ejecución
+    anterior (si existe) para no dejar datos caducados."""
     if rows:
         writer_fn(path, rows)
     elif path.exists():
@@ -109,7 +114,11 @@ def _write_csv(path, matches: list[MatchResult]) -> None:
 def _write_unmatched(path, matches: list[MatchResult]) -> None:
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["Title", "Year", "Media Type", "FilmAffinity URL", "List"])
+        writer.writerow(["Title", "Year", "Media Type", "Your Rating", "FilmAffinity URL"])
         for m in matches:
             item = m.item
-            writer.writerow([item.title, item.year or "", item.media_type, item.fa_url or "", item.list_name])
+            writer.writerow([
+                item.title, item.year or "", item.media_type,
+                item.user_rating if item.user_rating is not None else "",
+                item.fa_url or "",
+            ])

@@ -1,20 +1,19 @@
 [project]
 name = "filmaffinity-to-imdb"
-version = "0.1.0"
-description = "Migrate your FilmAffinity lists (movies & TV shows) to IMDb — scrapes FilmAffinity, matches titles via OMDb, and exports an IMDb-ready CSV."
+version = "0.2.0"
+description = "Migrate your FilmAffinity lists (movies & TV shows) to IMDb — scrapes FilmAffinity, matches titles via TMDb, and exports IMDb-ready CSVs."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 dependencies = [
     "requests>=2.31.0",
     "beautifulsoup4>=4.12.0",
+    "cloudscraper>=1.2.71",
     "click>=8.1.0",
     "python-dotenv>=1.0.0",
-    "cloudscraper>=1.2.71",
 ]
 
 [project.optional-dependencies]
-automation = ["playwright>=1.40.0"]
 dev = ["pytest>=7.4.0", "responses>=0.24.0"]
 
 [project.scripts]

@@ -1,28 +1,32 @@
 # filmaffinity-to-imdb
 
-Migra tus listas de [FilmAffinity](https://www.filmaffinity.com) a
-[IMDb](https://www.imdb.com), sin tener que buscar y añadir cada título a
-mano.
+Migra tus listas de [FilmAffinity](https://www.filmaffinity.com) (películas
+y series, con tu nota personal incluida) a [IMDb](https://www.imdb.com),
+sin tener que buscar y añadir cada título a mano.
 
 > ⚠️ Proyecto no oficial, para uso personal. Ni FilmAffinity ni IMDb ofrecen
-> una API pública para esto, así que este proyecto depende de scraping
-> (FilmAffinity) y de una API de terceros para el matching (OMDb). Si
-> cualquiera de los dos sitios cambia su HTML/API, el proyecto puede dejar de
-> funcionar hasta que se actualice.
+> una API pública para esto: este proyecto depende de scraping
+> (FilmAffinity) y de la API de [TMDb](https://www.themoviedb.org) para el
+> matching de títulos. Si cualquiera de los dos sitios cambia su web, el
+> proyecto puede dejar de funcionar hasta que se actualice.
 
 ## Qué hace
 
-1. **Scrapea** una lista pública de FilmAffinity y extrae título, año y tipo
-   (película/serie) de cada elemento.
-2. **Resuelve** cada título a su ID de IMDb (`tt...`) usando la API gratuita
-   de [OMDb](https://www.omdbapi.com/).
-3. **Exporta** un CSV compatible con herramientas de importación de listas de
-   IMDb (formato con columna `Const` = tt-ID), listo para subir con un
-   userscript como [IMDb List Bulk
-   Uploader](https://github.com/BonaFideBOSS/imdb-list-bulk-uploader).
+1. **Scrapea** una lista pública de FilmAffinity: título, año, tipo
+   (película/serie) y tu nota personal de cada elemento si la tuviera.
+2. **Resuelve** cada título a su ID de IMDb (`tt...`) usando la API de TMDb,
+   que compara contra títulos traducidos (necesario porque FilmAffinity
+   muestra los títulos en español, pero IMDb indexa por título original).
+3. **Exporta** un CSV con el mismo formato que usa el propio IMDb, listo
+   para importar.
+
+Cada lista genera sus propios ficheros, nombrados a partir del nombre de la
+lista, así que puedes migrar varias sin que se pisen entre sí:
 
 ```
-FilmAffinity (lista) --scrape--> CSV intermedio --match (OMDb)--> CSV IMDb --import--> Lista en IMDb
+lista_de_peliculas.csv             -> resueltos con confianza alta
+lista_de_peliculas_ambiguous.csv   -> resueltos con duda, revísalo
+lista_de_peliculas_unmatched.csv   -> no se encontraron en TMDb, añádelos a mano
 ```
 
 ## Instalación
@@ -30,73 +34,86 @@ FilmAffinity (lista) --scrape--> CSV intermedio --match (OMDb)--> CSV IMDb --imp
 ```bash
 git clone https://github.com/tu-usuario/filmaffinity-to-imdb.git
 cd filmaffinity-to-imdb
-pip install -e .
+python3 -m venv venv
+source venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-Necesitas una API key gratuita de OMDb: pídela en
-https://www.omdbapi.com/apikey.aspx (tier gratuito: 1000 peticiones/día).
-Guárdala en un fichero `.env` en la raíz del proyecto:
+Necesitas una API key gratuita de TMDb (v3 auth):
+https://www.themoviedb.org/settings/api. Guárdala en un fichero `.env` en la
+raíz del proyecto (copia `.env.example`):
 
 ```
-OMDB_API_KEY=tu_clave_aqui
+TMDB_API_KEY=tu_clave_aqui
 ```
 
 ## Uso
 
-### 1. Encuentra la URL de tu lista
+### 1. Haz pública la lista en FilmAffinity
 
-Entra en tu lista en FilmAffinity (debe ser pública), haz click en el icono de compartir y copia la URL completa. El enlace de compartir tiene esta forma:
+El scraper solo puede acceder a listas **públicas**. Dentro de FilmAffinity,
+en la lista que quieras migrar, márcala como pública y usa su opción de
+**compartir** para obtener el enlace. Debe tener esta forma:
 
-\`\`\`
+```
 https://www.filmaffinity.com/es/userlist.php?user_id=TU_USER_ID&list_id=XXXXXX
-\`\`\`
+```
 
-### 2. Pipeline completo (recomendado)
+### 2. Genera el CSV para IMDb
 
 ```bash
 filmaffinity-to-imdb run "https://www.filmaffinity.com/es/userlist.php?user_id=TU_USER_ID&list_id=XXXXXX" \
-    --list-name "Pendientes" \
-    -o pendientes_imdb.csv
+    --list-name "Lista de peliculas"
 ```
 
-Esto genera:
-- `pendientes_imdb.csv` — items resueltos con confianza alta, listos para
-  importar.
-- `pendientes_imdb_ambiguous.csv` — resueltos pero conviene revisarlos (p.ej.
-  el año no coincidía exactamente).
-- `pendientes_imdb_unmatched.csv` — no se encontraron en OMDb; tocará
-  añadirlos a mano.
+Al terminar verás un resumen como:
 
-### 3. O paso a paso (útil para depurar)
+```
+Resueltos: 516 | Ambiguos: 28 | Sin encontrar: 0 | Total: 544
+CSV listo para importar en IMDb: lista_de_peliculas.csv
+Revisar antes de importar: lista_de_peliculas_ambiguous.csv
+```
+
+Revisa `_ambiguous.csv` a mano antes del siguiente paso. En ocasiones, los datos de un título que hay en FA no coinciden con los de TMDb, como el año. Esos títulos aparecerán en esta lista.
+
+También puedes hacerlo en dos pasos si prefieres inspeccionar el CSV
+intermedio antes de gastar peticiones de TMDb:
 
 ```bash
 filmaffinity-to-imdb scrape "https://www.filmaffinity.com/es/userlist.php?user_id=TU_USER_ID&list_id=XXXXXX" \
-    --list-name "Pendientes" -o pendientes_fa.csv
+    --list-name "Lista de peliculas"
 
-filmaffinity-to-imdb match pendientes_fa.csv -o pendientes_imdb.csv
+filmaffinity-to-imdb match lista_de_peliculas_fa.csv
 ```
 
-### 4. Importar en IMDb
+### 3. Importa el CSV en IMDb
 
-1. Crea una lista vacía en IMDb.
-2. Instala [Tampermonkey](https://www.tampermonkey.net/) (o similar) y el
-   script [IMDb List Bulk
-   Uploader](https://github.com/BonaFideBOSS/imdb-list-bulk-uploader).
-3. Abre tu lista en IMDb y usa el script para pegar los IDs de
-   `pendientes_imdb.csv` (columna `Const`).
+IMDb no tiene importación de listas por API, pero sí una herramienta oficial
+de importación por CSV en:
+
+**https://www.imdb.com/es-es/labs/import-watch-history/**
+
+Sube ahí `lista_de_peliculas.csv` (y, tras revisarlo, también el
+`_ambiguous.csv` si quieres incluirlo o, si lo prefieres, sube los títulos de esta lista a mano para asegurarte de que son los correctos). El formato del CSV que genera este
+proyecto es compatible con esa herramienta porque replica las mismas
+columnas que usa el propio IMDb al exportar tus listas (`Const`, `Title`,
+`Year`, `Your Rating`, etc.).
+
+Repite el proceso (pasos 1-3) para cada lista que quieras migrar.
 
 ## Limitaciones conocidas
 
-- **Los selectores del scraper son un punto de partida**, no una garantía:
-  se han definido según patrones documentados de FilmAffinity, pero conviene
-  validarlos contra una lista real y ajustarlos en `scraper.py` (variable
-  `SELECTORS`) si no extraen bien los datos.
-- El matching por título+año puede fallar con remakes, títulos traducidos de
-  forma distinta en España, o series con nombres de temporada distintos.
-  Revisa siempre `_ambiguous.csv` y `_unmatched.csv`.
-- No hay forma de escribir directamente en IMDb sin un userscript o
-  automatización de navegador (IMDb no tiene API de escritura pública).
-- Solo migra título/año/tipo — no reseñas ni valoraciones personales.
+- **Los selectores del scraper están validados contra el HTML real de
+  FilmAffinity** (a fecha de creación de este proyecto), pero si
+  FilmAffinity cambia su maquetación, tocará ajustar `SELECTORS` en
+  `scraper.py`.
+- El matching por título+año puede fallar con remakes o títulos con el mismo
+  nombre. Revisa siempre `_ambiguous.csv` y `_unmatched.csv` antes de
+  importar.
+- Solo migra título, año, tipo y tu nota personal — no reseñas de texto.
+- FilmAffinity está detrás de Cloudflare; el scraper usa `cloudscraper` para
+  sortear el challenge anti-bot, pero si Cloudflare endurece la protección
+  en el futuro, esto podría dejar de bastar.
 
 ## Desarrollo
 
@@ -106,16 +123,10 @@ pytest
 ```
 
 Los tests del scraper usan un fixture HTML local (`tests/fixtures/`), no
-hacen peticiones reales a FilmAffinity. Los tests del matcher mockean la API
-de OMDb con la librería `responses`.
-
-## Roadmap / ideas pendientes
-
-- [ ] Automatizar la subida a IMDb con Playwright (en vez de depender de un
-      userscript manual).
-- [ ] Soporte para varias listas en una sola ejecución.
-- [ ] Modo interactivo para resolver a mano los `_ambiguous` y `_unmatched`.
+hacen peticiones reales a FilmAffinity. Los tests del matcher y del
+exportador no hacen peticiones de red reales (mockeadas con `responses`, o
+sin red en absoluto).
 
 ## Licencia
 
-MIT
+@RadioFiambre

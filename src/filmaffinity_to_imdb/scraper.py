@@ -2,23 +2,20 @@
 Scraper de listas de FilmAffinity.
 
 FilmAffinity no tiene API pública, así que esto funciona parseando el HTML
-público de una lista. Los selectores CSS están centralizados en `SELECTORS`
-para que sea fácil ajustarlos si FilmAffinity cambia su maquetación (algo que
-ya le ha pasado a varios scrapers de la comunidad, ver README).
+público de una lista.
 
-URL correcta a usar: la vista PÚBLICA de una lista es https://www.filmaffinity.com/es/userlist.php?user_id=<TU_USER_ID>&list_id=<LIST_ID>
-(NO mylist.php, que es la vista privada de gestión y exige login). Puedes
-forzar el formato "listado con pósters" añadiendo &chv=list. La paginación
-se controla con &page=N.
+URL a usar: la vista PÚBLICA de una lista es
+    https://www.filmaffinity.com/es/userlist.php?user_id=<TU_USER_ID>&list_id=<LIST_ID>
+(NO mylist.php, que es la vista privada de gestión y exige login). Ese enlace
+lo genera FilmAffinity con la opción "compartir lista" — debes marcar la
+lista como pública para que esta URL funcione sin sesión iniciada.
 
-IMPORTANTE: los selectores CSS de abajo siguen siendo un punto de partida:
-se han inferido de una extracción en texto/markdown de la página real, no
-del HTML crudo con sus clases (mi entorno no puede inspeccionar el DOM
-directamente). Antes de fiarte del scraper, ejecuta
-`filmaffinity-to-imdb scrape` sobre tu lista y revisa si los items salen
-bien. Si no, comparte un fragmento de HTML real (clic derecho sobre una
-tarjeta de película → Inspeccionar → Copy → Copy outerHTML) para ajustar
-los selectores con precisión.
+FilmAffinity está detrás de Cloudflare, así que usamos `cloudscraper` en vez
+de `requests` normal para poder pasar el challenge anti-bot.
+
+Notas sobre paginación: al pedir una página más allá de la última real,
+FilmAffinity puede devolver un 404 o repetir el contenido de la última
+página válida, según el caso — este scraper contempla ambos.
 """
 
 from __future__ import annotations
@@ -42,8 +39,6 @@ DEFAULT_HEADERS = {
     "Accept-Language": "es-ES,es;q=0.9",
 }
 
-# Selectores centralizados: si FilmAffinity cambia el HTML, solo hay que
-# tocar aquí.
 SELECTORS = {
     "item_card": "li[data-movie-id]",
     "title": ".mc-title a",
@@ -65,10 +60,8 @@ class FAScraperConfig:
 class FAScraper:
     def __init__(self, config: Optional[FAScraperConfig] = None):
         self.config = config or FAScraperConfig()
-        # cloudscraper en vez de requests.Session(): resuelve automáticamente
-        # los challenges de Cloudflare (ver cf-mitigated: challenge en la
-        # respuesta 403). Si en el futuro Cloudflare endurece el challenge,
-        # esto podría dejar de bastar y tocaría pasar a Playwright.
+        # cloudscraper en vez de requests.Session(): FilmAffinity está detrás
+        # de Cloudflare y bloquea peticiones simples con 403.
         self.session = cloudscraper.create_scraper(
             browser={"browser": "chrome", "platform": "windows", "mobile": False}
         )
@@ -78,16 +71,6 @@ class FAScraper:
         """
         Recorre una lista de FilmAffinity (con paginación) y va cediendo
         FAItem por cada película/serie encontrada.
-
-        list_url: URL completa de la primera página de la lista, p.ej.
-            https://www.filmaffinity.com/es/userlist.php?user_id=X&list_id=XXXX
-
-        Nota: al pedir una página más allá de la última real, FilmAffinity
-        no devuelve una página vacía, sino que repite el contenido de la
-        última página válida. Por eso llevamos la cuenta de los fa_id ya
-        vistos: si una página no aporta ningún item nuevo, asumimos que
-        hemos llegado al final y paramos ahí, en vez de fiarnos solo de
-        max_pages.
         """
         page = 1
         seen_any = False
@@ -101,8 +84,8 @@ class FAScraper:
                 if e.response is not None and e.response.status_code == 404:
                     break  # nos pasamos del final real de la lista
                 raise
-            items = list(self._parse_page(html, list_name=list_name))
 
+            items = list(self._parse_page(html, list_name=list_name))
             if not items:
                 break
 
@@ -119,10 +102,10 @@ class FAScraper:
 
         if not seen_any:
             raise ValueError(
-                f"No se encontró ningún item en {list_url}. "
-                "Puede que la lista sea privada, que la URL sea incorrecta, "
-                "o que los selectores en SELECTORS ya no coincidan con el "
-                "HTML actual de FilmAffinity (ver docstring del módulo)."
+                f"No se encontró ningún item en {list_url}. Puede que la "
+                "lista sea privada (revisa que esté marcada como pública en "
+                "FilmAffinity), que la URL sea incorrecta, o que FilmAffinity "
+                "haya cambiado su maquetación."
             )
 
     def _fetch(self, url: str) -> str:
@@ -174,9 +157,7 @@ class FAScraper:
     @staticmethod
     def _guess_media_type(card) -> str:
         # El alt de la imagen del póster trae el sufijo "(Serie de TV)"
-        # cuando es una serie; en películas no lleva ningún sufijo. Es más
-        # fiable que buscar la palabra "serie" en el texto de la tarjeta,
-        # que podría aparecer por casualidad en el reparto o el género.
+        # cuando es una serie; en películas no lleva ningún sufijo.
         poster_img = card.select_one(SELECTORS["poster_img"])
         alt_text = poster_img.get("alt", "") if poster_img else ""
         if "serie de tv" in alt_text.lower():

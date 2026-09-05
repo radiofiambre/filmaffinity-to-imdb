@@ -11,7 +11,7 @@ class FAItem:
     title: str
     year: Optional[int]
     media_type: str  # "movie" | "tv_series"
-    fa_id: Optional[str] = None       # ID interno de FilmAffinity, si se pudo extraer
+    fa_id: Optional[str] = None       # ID interno de FilmAffinity (data-movie-id)
     fa_url: Optional[str] = None
     list_name: str = ""
     user_rating: Optional[int] = None  # tu nota personal en FilmAffinity (1-10), None si no puntuaste
@@ -31,4 +31,4 @@ class MatchResult:
     imdb_original_title: Optional[str] = None
     imdb_year: Optional[int] = None
     confidence: str = "none"  # "exact" | "fuzzy" | "none"
-    candidates: list = field(default_factory=list)  # otros posibles matches, si hay ambigüedad
+    candidates: list = field(default_factory=list)
