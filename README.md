@@ -74,10 +74,9 @@ CSV listo para importar en IMDb: lista_de_peliculas.csv
 Revisar antes de importar: lista_de_peliculas_ambiguous.csv
 ```
 
-Revisa `_ambiguous.csv` a mano antes del siguiente paso. En ocasiones, los datos de un título que hay en FA no coinciden con los de TMDb, como el año. Esos títulos aparecerán en esta lista.
+Revisa `_ambiguous.csv` a mano antes del siguiente paso. En ocasiones, los datos de un título que hay en FilmAffinity no coinciden con los de TMDb, como podría ser el año. Esos títulos aparecerán en esta lista.
 
-También puedes hacerlo en dos pasos si prefieres inspeccionar el CSV
-intermedio antes de gastar peticiones de TMDb:
+También puedes hacerlo en dos pasos si prefieres inspeccionar el CSV intermedio antes de gastar peticiones de TMDb:
 
 ```bash
 filmaffinity-to-imdb scrape "https://www.filmaffinity.com/es/userlist.php?user_id=TU_USER_ID&list_id=XXXXXX" \
@@ -88,32 +87,24 @@ filmaffinity-to-imdb match lista_de_peliculas_fa.csv
 
 ### 3. Importa el CSV en IMDb
 
-IMDb no tiene importación de listas por API, pero sí una herramienta oficial
-de importación por CSV en:
+IMDb no tiene importación de listas por API, pero sí una herramienta oficial de importación por CSV en:
 
 **https://www.imdb.com/es-es/labs/import-watch-history/**
 
-Sube ahí `lista_de_peliculas.csv` (y, tras revisarlo, también el
-`_ambiguous.csv` si quieres incluirlo o, si lo prefieres, sube los títulos de esta lista a mano para asegurarte de que son los correctos). El formato del CSV que genera este
-proyecto es compatible con esa herramienta porque replica las mismas
-columnas que usa el propio IMDb al exportar tus listas (`Const`, `Title`,
-`Year`, `Your Rating`, etc.).
+Sube ahí `lista_de_peliculas.csv`.
+Si tienes algún archivo `_ambiguous.csv`, revísa si está correcto antes de subirlo. Los títulos que no sean correctos deberás incluirlos a mano en tu lista de IMDB.
+Los títulos en `_unmatched.csv` también los tendrás que añadir a mano.
+
+El formato del CSV que genera este proyecto es compatible con esa herramienta porque replica las mismas columnas que usa el propio IMDb al exportar tus listas (`Const`, `Title`, `Year`, `Your Rating`, etc.).
 
 Repite el proceso (pasos 1-3) para cada lista que quieras migrar.
 
 ## Limitaciones conocidas
 
-- **Los selectores del scraper están validados contra el HTML real de
-  FilmAffinity** (a fecha de creación de este proyecto), pero si
-  FilmAffinity cambia su maquetación, tocará ajustar `SELECTORS` en
-  `scraper.py`.
-- El matching por título+año puede fallar con remakes o títulos con el mismo
-  nombre. Revisa siempre `_ambiguous.csv` y `_unmatched.csv` antes de
-  importar.
+- **Los selectores del scraper están validados contra el HTML real de FilmAffinity** (a fecha de creación de este proyecto), pero si FilmAffinity cambia su maquetación, tocará ajustar `SELECTORS` en `scraper.py`.
+- El matching por título+año puede fallar con remakes o títulos con el mismo nombre. Revisa siempre `_ambiguous.csv` y `_unmatched.csv` antes de importar.
 - Solo migra título, año, tipo y tu nota personal — no reseñas de texto.
-- FilmAffinity está detrás de Cloudflare; el scraper usa `cloudscraper` para
-  sortear el challenge anti-bot, pero si Cloudflare endurece la protección
-  en el futuro, esto podría dejar de bastar.
+- FilmAffinity está detrás de Cloudflare; el scraper usa `cloudscraper` para sortear el challenge anti-bot, pero si Cloudflare endurece la protección en el futuro, esto podría dejar de bastar.
 
 ## Desarrollo
 
@@ -122,10 +113,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Los tests del scraper usan un fixture HTML local (`tests/fixtures/`), no
-hacen peticiones reales a FilmAffinity. Los tests del matcher y del
-exportador no hacen peticiones de red reales (mockeadas con `responses`, o
-sin red en absoluto).
+Los tests del scraper usan un fixture HTML local (`tests/fixtures/`), no hacen peticiones reales a FilmAffinity. Los tests del matcher y del exportador no hacen peticiones de red reales (mockeadas con `responses`, o sin red en absoluto).
 
 ## Licencia
 
